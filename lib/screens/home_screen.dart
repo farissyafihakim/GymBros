@@ -1,45 +1,43 @@
-// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
 import 'gym_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Function(bool) onGymStatusChanged;
+
+  const HomeScreen({super.key, required this.onGymStatusChanged});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>{
-
+class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _gyms = [];
-
   bool _isLoading = true;
 
   @override
-  void initState(){
+  void initState() {
     super.initState();
     _fetchGyms();
   }
 
-  //async works waiting for supabase
   Future<void> _fetchGyms() async {
     try {
       final response = await Supabase.instance.client
-      .from("gyms")
-      .select()
-      .order("name", ascending: true);
+          .from('gyms')
+          .select()
+          .order('name', ascending: true);
 
-    setState((){
-      _gyms = List<Map<String, dynamic>>.from(response);
-      _isLoading = false;
+      setState(() {
+        _gyms = List<Map<String, dynamic>>.from(response);
+        _isLoading = false;
       });
-    }catch (e){
+    } catch (e) {
       setState(() => _isLoading = false);
-      if(mounted){
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to load gyms: $e")),
+          SnackBar(content: Text('Failed to load gyms: $e')),
         );
       }
     }
@@ -63,10 +61,7 @@ class _HomeScreenState extends State<HomeScreen>{
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text(
           'GymBros 💪',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
@@ -76,18 +71,25 @@ class _HomeScreenState extends State<HomeScreen>{
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE8FF00)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFE8FF00)),
+            )
           : _gyms.isEmpty
               ? const Center(
-                  child: Text('No gyms found', style: TextStyle(color: Colors.grey)),
+                  child: Text('No gyms found',
+                      style: TextStyle(color: Colors.grey)),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _gyms.length,
-                  itemBuilder: (context, index) {
-                    final gym = _gyms[index];
-                    return _buildGymCard(gym);
-                  },
+              : RefreshIndicator(
+                  color: const Color(0xFFE8FF00),
+                  onRefresh: _fetchGyms,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _gyms.length,
+                    itemBuilder: (context, index) {
+                      final gym = _gyms[index];
+                      return _buildGymCard(gym);
+                    },
+                  ),
                 ),
     );
   }
@@ -111,7 +113,10 @@ class _HomeScreenState extends State<HomeScreen>{
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => GymDetailScreen(gym: gym),
+            builder: (_) => GymDetailScreen(
+              gym: gym,
+              onGymStatusChanged: widget.onGymStatusChanged,
+            ),
           ),
         );
       },
@@ -124,9 +129,9 @@ class _HomeScreenState extends State<HomeScreen>{
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // gym image
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
               child: gym['image_url'] != null
                   ? Image.network(
                       gym['image_url'],
@@ -137,10 +142,10 @@ class _HomeScreenState extends State<HomeScreen>{
                   : Container(
                       height: 180,
                       color: const Color(0xFF2A2A2A),
-                      child: const Icon(Icons.fitness_center, color: Colors.grey, size: 48),
+                      child: const Icon(Icons.fitness_center,
+                          color: Colors.grey, size: 48),
                     ),
             ),
-            // gym info
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -155,19 +160,31 @@ class _HomeScreenState extends State<HomeScreen>{
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    gym['location'] ?? '',
-                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on,
+                          color: Colors.grey, size: 16),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          gym['location'] ?? '',
+                          style: const TextStyle(
+                              color: Colors.grey, fontSize: 14),
+                          softWrap: true,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  // occupancy bar
                   Row(
                     children: [
                       Icon(Icons.people, color: occupancyColor, size: 18),
                       const SizedBox(width: 8),
                       Text(
                         '$occupancy / $capacity people',
-                        style: TextStyle(color: occupancyColor, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: occupancyColor,
+                            fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),

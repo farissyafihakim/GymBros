@@ -1,7 +1,7 @@
+import 'package:GymBros/screens/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); //make sure flutter engine is ready before start
@@ -32,7 +32,7 @@ class GymBros extends StatelessWidget{
       
       //check if there a session go to home screen
       //if no session go to login screen
-      home: session != null ? const HomeScreen() : const LoginScreen(),
+      home: session != null ? const MainScreen() : const LoginScreen(),
     );
   }
 }
