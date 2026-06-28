@@ -4,6 +4,7 @@ import 'home_screen.dart';
 import 'workout_screen.dart';
 import 'progress_screen.dart';
 import 'profile_screen.dart';
+import 'gym_detail_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -15,6 +16,8 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   bool _isInsideGym = false;
+  Map<String, dynamic>? _activeGym;
+  Map<String, dynamic>? _viewingGym;
 
   @override
   void initState() {
@@ -29,37 +32,67 @@ class _MainScreenState extends State<MainScreen> {
 
       final response = await Supabase.instance.client
           .from('gym_sessions')
-          .select()
+          .select('*, gyms(*)')
           .eq('user_id', userId)
           .isFilter('exited_at', null)
           .maybeSingle();
 
-      setState(() {
-        _isInsideGym = response != null;
-      });
+      if (response != null) {
+        setState(() {
+          _isInsideGym = true;
+          _activeGym = response['gyms'];
+        });
+      } else {
+        setState(() {
+          _isInsideGym = false;
+          _activeGym = null;
+        });
+      }
     } catch (e) {
       print('Check session error: $e');
     }
   }
 
-  void _onGymStatusChanged(bool isInside) {
+  void _onGymStatusChanged(bool isInside, [Map<String, dynamic>? gym]) {
     setState(() {
       _isInsideGym = isInside;
+      _activeGym = isInside ? gym : null;
+    });
+  }
+
+  void _openGymDetail(Map<String, dynamic> gym) {
+    setState(() {
+      _viewingGym = gym;
+    });
+  }
+
+  void _closeGymDetail() {
+    setState(() {
+      _viewingGym = null;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          HomeScreen(onGymStatusChanged: _onGymStatusChanged),
-          const WorkoutScreen(),
-          const ProgressScreen(),
-          const ProfileScreen(),
-        ],
-      ),
+      body: _viewingGym != null
+          ? GymDetailScreen(
+              gym: _viewingGym!,
+              onGymStatusChanged: _onGymStatusChanged,
+              onBack: _closeGymDetail,
+            )
+          : IndexedStack(
+              index: _currentIndex,
+              children: [
+                HomeScreen(
+                  onGymStatusChanged: _onGymStatusChanged,
+                  onGymTapped: _openGymDetail,
+                ),
+                const WorkoutScreen(),
+                const ProgressScreen(),
+                const ProfileScreen(),
+              ],
+            ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         backgroundColor: const Color(0xFF1A1A1A),
@@ -67,16 +100,14 @@ class _MainScreenState extends State<MainScreen> {
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         onTap: (index) {
-          if (index == 0 && _isInsideGym) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('⚠️ You must exit the gym before going home!'),
-                backgroundColor: Colors.red,
-              ),
-            );
+          if (index == 0 && _isInsideGym && _activeGym != null) {
+            _openGymDetail(_activeGym!);
             return;
           }
-          setState(() => _currentIndex = index);
+          setState(() {
+            _currentIndex = index;
+            _viewingGym = null;
+          });
         },
         items: [
           BottomNavigationBarItem(

@@ -4,12 +4,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class GymDetailScreen extends StatefulWidget {
   final Map<String, dynamic> gym;
-  final Function(bool) onGymStatusChanged;
+  final Function(bool, [Map<String, dynamic>?]) onGymStatusChanged;
+  final VoidCallback onBack; 
 
   const GymDetailScreen({
     super.key,
     required this.gym,
     required this.onGymStatusChanged,
+    required this.onBack,
   });
 
   @override
@@ -31,7 +33,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     _checkActiveSession();
   }
 
-  // ─── CHECK SESSION ────────────────────────────────────────────────────────
+  //CHECK SESSION
 
   Future<void> _checkActiveSession() async {
     try {
@@ -62,8 +64,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
-  // ─── ENTER DIALOG ─────────────────────────────────────────────────────────
-
+  //ENTER DIALOG
   void _showEnterGymDialog() {
     showDialog(
       context: context,
@@ -105,8 +106,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     );
   }
 
-  // ─── EXIT DIALOG ──────────────────────────────────────────────────────────
-
+  //EXIT DIALOG 
   void _showExitGymDialog() {
     showDialog(
       context: context,
@@ -148,8 +148,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     );
   }
 
-  // ─── NFC SCREEN ───────────────────────────────────────────────────────────
-
+  //NFC SCREEN
   void _showNfcScreen({required bool isEntering}) async {
     bool nfcAvailable = false;
 
@@ -228,49 +227,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
               style: const TextStyle(color: Colors.grey, fontSize: 14),
             ),
             const SizedBox(height: 32),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0D0D0D),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF2A2A2A)),
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    '🛠 Debug Mode - No NFC Reader Yet',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      try {
-                        await FlutterNfcKit.finish();
-                      } catch (_) {}
-                      if (context.mounted) Navigator.pop(context);
-                      if (isEntering) {
-                        _handleNfcEntry();
-                      } else {
-                        _handleNfcExit();
-                      }
-                    },
-                    icon: const Icon(Icons.touch_app, size: 18),
-                    label: Text(isEntering
-                        ? 'Simulate Entry Tap'
-                        : 'Simulate Exit Tap'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2A2A2A),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
@@ -323,7 +280,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
-  // ─── HANDLE ENTRY ─────────────────────────────────────────────────────────
+  //HANDLE ENTRY
 
   Future<void> _handleNfcEntry() async {
     setState(() => _isLoading = true);
@@ -354,6 +311,15 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
         return;
       }
 
+      if(_currentOccupancy >= _maxCapacity){
+        setState(() => _isLoading = false);
+        if(mounted){
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('🚫 This gym is currently full!'), backgroundColor: Colors.red),
+          );
+        }
+      }
+
       // create new session
       final session = await Supabase.instance.client
           .from('gym_sessions')
@@ -380,7 +346,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       });
 
       // tell MainScreen user is now inside
-      widget.onGymStatusChanged(true);
+      widget.onGymStatusChanged(true, widget.gym);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -400,8 +366,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
-  // ─── HANDLE EXIT ──────────────────────────────────────────────────────────
-
+  //HANDLE EXIT
   Future<void> _handleNfcExit() async {
     setState(() => _isLoading = true);
 
@@ -461,8 +426,6 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
-  // ─── BUILD ────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final percentage = _currentOccupancy / _maxCapacity;
@@ -476,7 +439,16 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       occupancyColor = Colors.red;
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_isInsideGym,
+      onPopInvokedWithResult: (didPop, result){
+        if (!didPop && _isInsideGym){
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('⚠️ You must exit the gym before going back!'), backgroundColor: Colors.red ),
+          );
+        }
+      },
+      child:Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       body: CustomScrollView(
         slivers: [
@@ -485,6 +457,21 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
             pinned: true,
             backgroundColor: const Color(0xFF1A1A1A),
             iconTheme: const IconThemeData(color: Colors.white),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: (){
+                if(_isInsideGym){
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('⚠️ You must exit the gym before going back!'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                widget.onBack();
+              },
+            ),
             flexibleSpace: FlexibleSpaceBar(
               background: widget.gym['image_url'] != null
                   ? Image.network(
@@ -603,6 +590,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                           ? null
                           : _isInsideGym
                               ? _showExitGymDialog
+                              :_currentOccupancy >= _maxCapacity
+                              ? null
                               : _showEnterGymDialog,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _isInsideGym
@@ -624,7 +613,10 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                                   : Colors.black,
                             )
                           : Text(
-                              _isInsideGym ? 'Exit Gym' : 'Enter Gym',
+                              _isInsideGym ? 'Exit Gym'
+                              : _currentOccupancy >= _maxCapacity
+                              ? 'Gym Full'
+                              : 'Enter Gym',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -638,6 +630,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           ),
         ],
       ),
+    )
     );
   }
 }

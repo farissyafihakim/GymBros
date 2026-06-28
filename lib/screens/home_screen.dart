@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
-import 'gym_detail_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
-  final Function(bool) onGymStatusChanged;
+  final Function(bool, [Map<String, dynamic>?]) onGymStatusChanged;
+  final Function(Map<String, dynamic>) onGymTapped;
 
-  const HomeScreen({super.key, required this.onGymStatusChanged});
+  const HomeScreen({super.key, required this.onGymStatusChanged,required this.onGymTapped});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -110,15 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => GymDetailScreen(
-              gym: gym,
-              onGymStatusChanged: widget.onGymStatusChanged,
-            ),
-          ),
-        );
+        widget.onGymTapped(gym);
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
