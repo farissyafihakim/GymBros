@@ -3,10 +3,12 @@ import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class GymDetailScreen extends StatefulWidget {
+  // gym data passed from HomeScreen
   final Map<String, dynamic> gym;
   final Function(bool, [Map<String, dynamic>?]) onGymStatusChanged;
   final VoidCallback onBack; 
 
+  // constructor to receive gym data and callbacks
   const GymDetailScreen({
     super.key,
     required this.gym,
@@ -25,6 +27,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   bool _isInsideGym = false;
   String? _activeSessionId;
 
+  
   @override
   void initState() {
     super.initState();
@@ -33,13 +36,18 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     _checkActiveSession();
   }
 
-  //CHECK SESSION
-
+  //check is the user in the gym
   Future<void> _checkActiveSession() async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) return;
 
+      final gymData = await Supabase.instance.client
+        .from('gyms')
+        .select()
+        .eq('id', widget.gym['id'])
+        .single();
+        
       final response = await Supabase.instance.client
           .from('gym_sessions')
           .select()
@@ -48,23 +56,24 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           .isFilter('exited_at', null)
           .maybeSingle();
 
-      if (response != null) {
-        setState(() {
+      setState((){
+        _currentOccupancy = gymData['current_occupancy'] as int? ?? 0;
+        _maxCapacity = gymData['max_capacity'] as int? ?? 50;
+
+        if (response != null) {
           _isInsideGym = true;
           _activeSessionId = response['id'];
-        });
-      } else {
-        setState(() {
+        } else {
           _isInsideGym = false;
           _activeSessionId = null;
-        });
-      }
-    } catch (e) {
+        }
+      });
+    } catch (e){
       print('Session check error: $e');
     }
   }
 
-  //ENTER DIALOG
+  //Enter gym pop up 
   void _showEnterGymDialog() {
     showDialog(
       context: context,
@@ -106,7 +115,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     );
   }
 
-  //EXIT DIALOG 
+  //Exit gym pop up
   void _showExitGymDialog() {
     showDialog(
       context: context,
@@ -148,10 +157,11 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     );
   }
 
-  //NFC SCREEN
+  //NFC Part
   void _showNfcScreen({required bool isEntering}) async {
     bool nfcAvailable = false;
 
+    // check if NFC is available on the device
     try {
       NFCAvailability availability = await FlutterNfcKit.nfcAvailability;
       nfcAvailable = availability == NFCAvailability.available;
@@ -163,6 +173,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
 
     if (!mounted) return;
 
+    //NFC pop up
     showModalBottomSheet(
       context: context,
       isDismissible: false,
@@ -261,6 +272,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     );
 
     if (nfcAvailable) {
+      // NFC polling and handling entry/exit
       try {
         await FlutterNfcKit.poll(timeout: const Duration(seconds: 30));
         await FlutterNfcKit.finish();
@@ -280,8 +292,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
-  //HANDLE ENTRY
-
+  //Handle NFC entry
   Future<void> _handleNfcEntry() async {
     setState(() => _isLoading = true);
 
@@ -318,6 +329,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
             const SnackBar(content: Text('🚫 This gym is currently full!'), backgroundColor: Colors.red),
           );
         }
+        return;
       }
 
       // create new session
@@ -348,6 +360,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       // tell MainScreen user is now inside
       widget.onGymStatusChanged(true, widget.gym);
 
+      // show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -358,6 +371,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       }
     } catch (e) {
       setState(() => _isLoading = false);
+      // show error message if entry fails
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to record entry: $e')),
@@ -366,7 +380,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
-  //HANDLE EXIT
+  //Handle NFC exit
   Future<void> _handleNfcExit() async {
     setState(() => _isLoading = true);
 
@@ -408,6 +422,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       // tell MainScreen user has exited
       widget.onGymStatusChanged(false);
 
+      // show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -426,6 +441,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
+  // UI of the gym detail screen
   @override
   Widget build(BuildContext context) {
     final percentage = _currentOccupancy / _maxCapacity;
@@ -439,6 +455,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       occupancyColor = Colors.red;
     }
 
+    // use PopScope to lock the back button so user cannot go back while iniside gym
     return PopScope(
       canPop: !_isInsideGym,
       onPopInvokedWithResult: (didPop, result){

@@ -4,6 +4,7 @@ import 'login_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
+  //two function from main screen
   final Function(bool, [Map<String, dynamic>?]) onGymStatusChanged;
   final Function(Map<String, dynamic>) onGymTapped;
 
@@ -22,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _fetchGyms();
   }
-
+   //fetch gyms from supabase and update the state
   Future<void> _fetchGyms() async {
     try {
       final response = await Supabase.instance.client
@@ -43,7 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
   }
-
+  
+  // logout function to sign out the user
   Future<void> _logout() async {
     await Supabase.instance.client.auth.signOut();
     if (mounted) {
@@ -54,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  //ui of the home screen
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -95,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  //build a card for each gym with its details and occupancy status
   Widget _buildGymCard(Map<String, dynamic> gym) {
     final occupancy = gym['current_occupancy'] as int? ?? 0;
     final capacity = gym['max_capacity'] as int? ?? 50;

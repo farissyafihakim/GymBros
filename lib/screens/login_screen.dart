@@ -21,25 +21,21 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     setState(() => _isLoading = true);
 
+    // try to login the user with Supabase
     try {
-      //supabase checks the email and password
       await Supabase.instance.client.auth.signInWithPassword(
-        email: _emailController.text.trim(), // .trim() to removes accident spaces
+        email: _emailController.text.trim(), 
         password: _passwordController.text.trim(),
       );
 
-      //mounted checks the screen is still active before navigate
-      //in case user left screen while waiting for supabase
       if (mounted) {
-        //push replacement removes Login page from history
-        // user cannot press back button to return to login page
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const MainScreen()),
         );
       }
     } catch (e) {
-      //lofin fail shows error message pop up
+      //login fail shows error message pop up
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Login failed: $e')),
@@ -52,8 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    //get the real screen height of the device
-    //to make it responsive
+    //get the real screen height of the device to make the UI responsive to different screen sizes
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
@@ -63,8 +58,6 @@ class _LoginScreenState extends State<LoginScreen> {
         //LayoutBuilder gives the real available space
         child: LayoutBuilder(
           builder: (context, constraints) {
-            //SingleChildScrollView makes the screen scrollable
-            //avoid overflow error
             return SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ConstrainedBox(
@@ -80,13 +73,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         'GymBros 💪',
                         style: TextStyle(
                           color: Colors.white,
-                          //font size 4% of screen height
                           fontSize: screenHeight * 0.04,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      //spacing below title
                       SizedBox(height: screenHeight * 0.08),
+
                       //email input field
                       TextField(
                         controller: _emailController,
@@ -94,6 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: _inputDecoration('Email'),
                       ),
                       const SizedBox(height: 16),
+
                       //password input field
                       TextField(
                         controller: _passwordController,
@@ -153,6 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // function to style the input fields
   InputDecoration _inputDecoration(String label) {
     return InputDecoration(
       labelText: label,
