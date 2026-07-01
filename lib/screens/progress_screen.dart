@@ -1,52 +1,232 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart'; // Make sure to run: flutter pub add fl_chart
+import 'package:fl_chart/fl_chart.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class ProgressScreen extends StatelessWidget {
+class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
+
+  @override
+  State<ProgressScreen> createState() => _ProgressScreenState();
+}
+
+class _ProgressScreenState extends State<ProgressScreen> {
+  static const bg = Color(0xFF0D0D0D);
+  static const card = Color(0xFF1A1A1A);
+  static const accent = Color(0xFFE8FF00);
+
+  bool _isLoading = true;
+
+  // Chart Data
+  List<double> _weeklyVolume = [0, 0, 0, 0];
+  double _maxVolume = 1000; // Default max for chart scaling
+  
+  List<FlSpot> _strengthSpots = [];
+  double _maxStrength = 100; // Default max for chart scaling
+  
+  List<Map<String, dynamic>> _personalRecords = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProgressData();
+  }
+
+  Future<void> _fetchProgressData() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+
+      // Join workout_logs with workout_sessions to get the date of each set
+      final response = await Supabase.instance.client
+          .from('workout_logs')
+          .select('reps, weight, exercise_name, workout_sessions!inner(started_at)')
+          .eq('workout_sessions.user_id', userId);
+
+      final logs = List<Map<String, dynamic>>.from(response);
+
+      _processVolumeData(logs);
+      _processStrengthData(logs);
+      _processPersonalRecords(logs);
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load progress: $e')),
+        );
+      }
+    }
+  }
+
+  // --- DATA PROCESSING METHODS ---
+
+  void _processVolumeData(List<Map<String, dynamic>> logs) {
+    final now = DateTime.now();
+    List<double> volumes = [0, 0, 0, 0];
+    double highestVolume = 0;
+
+    for (var log in logs) {
+      if (log['reps'] == null || log['weight'] == null) continue;
+      
+      final date = DateTime.parse(log['workout_sessions']['started_at']);
+      final daysAgo = now.difference(date).inDays;
+      
+      final volume = (log['reps'] as int) * (log['weight'] as num).toDouble();
+
+      // Group into the last 4 weeks (0-6 days ago = W4, 7-13 = W3, etc.)
+      if (daysAgo < 7) {
+        volumes[3] += volume;
+      } else if (daysAgo < 14) {
+        volumes[2] += volume;
+      } else if (daysAgo < 21) {
+        volumes[1] += volume;
+      } else if (daysAgo < 28) {
+        volumes[0] += volume;
+      }
+    }
+
+    for (var v in volumes) {
+      if (v > highestVolume) highestVolume = v;
+    }
+
+    _weeklyVolume = volumes;
+    _maxVolume = highestVolume > 0 ? highestVolume * 1.2 : 10000; 
+  }
+
+  void _processStrengthData(List<Map<String, dynamic>> logs) {
+    // For simplicity, tracking the max weight lifted per month over the last 6 months
+    final now = DateTime.now();
+    Map<int, double> monthlyMaxes = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
+    double absoluteMax = 0;
+
+    for (var log in logs) {
+      if (log['weight'] == null) continue;
+      
+      final date = DateTime.parse(log['workout_sessions']['started_at']);
+      final monthsAgo = (now.year - date.year) * 12 + now.month - date.month;
+      final weight = (log['weight'] as num).toDouble();
+
+      if (monthsAgo >= 0 && monthsAgo < 6) {
+        final index = 5 - monthsAgo; // 5 is current month, 0 is 5 months ago
+        if (weight > (monthlyMaxes[index] ?? 0)) {
+          monthlyMaxes[index] = weight;
+        }
+        if (weight > absoluteMax) absoluteMax = weight;
+      }
+    }
+
+    List<FlSpot> spots = [];
+    for (int i = 0; i < 6; i++) {
+      if (monthlyMaxes[i]! > 0) {
+        spots.add(FlSpot(i.toDouble(), monthlyMaxes[i]!));
+      } else if (spots.isNotEmpty) {
+        // Carry over the previous month's max if no lifts were recorded this month
+        spots.add(FlSpot(i.toDouble(), spots.last.y));
+      } else {
+        spots.add(FlSpot(i.toDouble(), 0));
+      }
+    }
+
+    _strengthSpots = spots;
+    _maxStrength = absoluteMax > 0 ? absoluteMax * 1.2 : 100;
+  }
+
+  void _processPersonalRecords(List<Map<String, dynamic>> logs) {
+    Map<String, Map<String, dynamic>> prMap = {};
+
+    for (var log in logs) {
+      if (log['weight'] == null) continue;
+      
+      final name = log['exercise_name'] as String;
+      final weight = (log['weight'] as num).toDouble();
+      final date = DateTime.parse(log['workout_sessions']['started_at']);
+
+      if (!prMap.containsKey(name) || weight > prMap[name]!['weight']) {
+        prMap[name] = {
+          'exercise': name,
+          'weight': weight,
+          'date': _formatTimeAgo(date),
+        };
+      }
+    }
+
+    // Convert map to list and sort by heaviest weight
+    _personalRecords = prMap.values.toList();
+    _personalRecords.sort((a, b) => b['weight'].compareTo(a['weight']));
+    
+    // Only show top 5 PRs to avoid cluttering the screen
+    if (_personalRecords.length > 5) {
+      _personalRecords = _personalRecords.sublist(0, 5);
+    }
+  }
+
+  String _formatTimeAgo(DateTime date) {
+    final days = DateTime.now().difference(date).inDays;
+    if (days == 0) return 'Today';
+    if (days == 1) return 'Yesterday';
+    if (days < 7) return '$days days ago';
+    if (days < 30) return '${(days / 7).floor()} weeks ago';
+    return '${(days / 30).floor()} months ago';
+  }
+
+  // --- UI BUILDERS ---
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: card,
         title: const Text(
           'Progress 📈',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        automaticallyImplyLeading: false, 
+        automaticallyImplyLeading: false,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            
-            // 1. STRENGTH GRAPH SECTION (Line Chart)
-            _buildSectionTitle('Strength Graph (1RM)'),
-            const SizedBox(height: 16),
-            _buildStrengthChart(),
-            const SizedBox(height: 32),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: accent))
+          : RefreshIndicator(
+              color: accent,
+              onRefresh: _fetchProgressData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionTitle('Strength Graph (Max Lift)'),
+                    const SizedBox(height: 16),
+                    _buildStrengthChart(),
+                    const SizedBox(height: 32),
 
-            // 2. VOLUME GRAPH SECTION (Bar Chart)
-            _buildSectionTitle('Weekly Volume (kg)'),
-            const SizedBox(height: 16),
-            _buildVolumeChart(),
-            const SizedBox(height: 32),
+                    _buildSectionTitle('Weekly Volume (kg)'),
+                    const SizedBox(height: 16),
+                    _buildVolumeChart(),
+                    const SizedBox(height: 32),
 
-            // 3. PERSONAL RECORDS SECTION
-            _buildSectionTitle('Personal Records'),
-            const SizedBox(height: 16),
-            _buildPersonalRecords(),
-            
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
+                    _buildSectionTitle('Personal Records'),
+                    const SizedBox(height: 16),
+                    _personalRecords.isEmpty
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text(
+                                'No PRs recorded yet. Go lift!',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ),
+                          )
+                        : _buildPersonalRecords(),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
-  // Reusable widget for section titles
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
@@ -58,20 +238,21 @@ class ProgressScreen extends StatelessWidget {
     );
   }
 
-  // --- STRENGTH LINE CHART ---
   Widget _buildStrengthChart() {
     return Container(
       width: double.infinity,
       height: 250,
       padding: const EdgeInsets.only(top: 24, right: 24, left: 12, bottom: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF2A2A2A)),
       ),
       child: LineChart(
         LineChartData(
-          gridData: const FlGridData(show: false), // Clean look without grid lines
+          minY: 0,
+          maxY: _maxStrength,
+          gridData: const FlGridData(show: false),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -81,6 +262,7 @@ class ProgressScreen extends StatelessWidget {
                 showTitles: true,
                 reservedSize: 40,
                 getTitlesWidget: (value, meta) {
+                  if (value == 0 || value == _maxStrength) return const Text('');
                   return Text(
                     '${value.toInt()}',
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
@@ -93,40 +275,35 @@ class ProgressScreen extends StatelessWidget {
                 showTitles: true,
                 interval: 1,
                 getTitlesWidget: (value, meta) {
-                  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-                  if (value.toInt() >= 0 && value.toInt() < months.length) {
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        months[value.toInt()],
-                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    );
-                  }
-                  return const Text('');
+                  // Dynamic labels relative to current month
+                  final currentMonth = DateTime.now().month;
+                  final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                  
+                  int labelIndex = (currentMonth - 6 + value.toInt()) % 12;
+                  if (labelIndex < 0) labelIndex += 12;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      months[labelIndex],
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  );
                 },
               ),
             ),
           ),
           lineBarsData: [
             LineChartBarData(
-              // Fake stats for Deadlift 1RM progression over 6 months
-              spots: const [
-                FlSpot(0, 140),
-                FlSpot(1, 145),
-                FlSpot(2, 150),
-                FlSpot(3, 165),
-                FlSpot(4, 170),
-                FlSpot(5, 180),
-              ],
+              spots: _strengthSpots,
               isCurved: true,
-              color: const Color(0xFFE8FF00),
+              color: accent,
               barWidth: 4,
               isStrokeCapRound: true,
-              dotData: const FlDotData(show: true), // Show dots on data points
+              dotData: const FlDotData(show: true),
               belowBarData: BarAreaData(
                 show: true,
-                color: const Color(0xFFE8FF00).withOpacity(0.15), // Faded yellow gradient below line
+                color: accent.withOpacity(0.15),
               ),
             ),
           ],
@@ -135,19 +312,19 @@ class ProgressScreen extends StatelessWidget {
     );
   }
 
-  // --- VOLUME BAR CHART ---
   Widget _buildVolumeChart() {
     return Container(
       width: double.infinity,
       height: 250,
       padding: const EdgeInsets.only(top: 24, right: 24, left: 12, bottom: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF2A2A2A)),
       ),
       child: BarChart(
         BarChartData(
+          maxY: _maxVolume,
           gridData: const FlGridData(show: false),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
@@ -158,9 +335,11 @@ class ProgressScreen extends StatelessWidget {
                 showTitles: true,
                 reservedSize: 45,
                 getTitlesWidget: (value, meta) {
-                  if (value == 0) return const Text('');
+                  if (value == 0 || value == _maxVolume) return const Text('');
                   return Text(
-                    '${(value / 1000).toStringAsFixed(1)}k',
+                    value >= 1000 
+                        ? '${(value / 1000).toStringAsFixed(1)}k'
+                        : value.toInt().toString(),
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                   );
                 },
@@ -170,7 +349,7 @@ class ProgressScreen extends StatelessWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
-                  const weeks = ['W1', 'W2', 'W3', 'W4'];
+                  const weeks = ['W-3', 'W-2', 'W-1', 'This Wk'];
                   if (value.toInt() >= 0 && value.toInt() < weeks.length) {
                     return Padding(
                       padding: const EdgeInsets.only(top: 8.0),
@@ -186,30 +365,28 @@ class ProgressScreen extends StatelessWidget {
             ),
           ),
           barGroups: [
-            // Fake stats for Weekly Volume (Total weight lifted)
-            _buildBarGroup(0, 12500),
-            _buildBarGroup(1, 14200),
-            _buildBarGroup(2, 13800),
-            _buildBarGroup(3, 16500),
+            _buildBarGroup(0, _weeklyVolume[0]),
+            _buildBarGroup(1, _weeklyVolume[1]),
+            _buildBarGroup(2, _weeklyVolume[2]),
+            _buildBarGroup(3, _weeklyVolume[3]),
           ],
         ),
       ),
     );
   }
 
-  // Helper function to build individual bars for the volume chart
   BarChartGroupData _buildBarGroup(int x, double y) {
     return BarChartGroupData(
       x: x,
       barRods: [
         BarChartRodData(
           toY: y,
-          color: const Color(0xFFE8FF00),
+          color: accent,
           width: 16,
           borderRadius: BorderRadius.circular(4),
           backDrawRodData: BackgroundBarChartRodData(
             show: true,
-            toY: 20000, // Max volume background bar
+            toY: _maxVolume,
             color: const Color(0xFF2A2A2A),
           ),
         ),
@@ -217,22 +394,14 @@ class ProgressScreen extends StatelessWidget {
     );
   }
 
-  // --- PERSONAL RECORDS ---
   Widget _buildPersonalRecords() {
-    final records = [
-      {'exercise': 'Deadlift', 'weight': '180 kg', 'date': '2 days ago'},
-      {'exercise': 'Squat', 'weight': '140 kg', 'date': '1 week ago'},
-      {'exercise': 'Bench Press', 'weight': '100 kg', 'date': '2 weeks ago'},
-      {'exercise': 'Overhead Press', 'weight': '65 kg', 'date': '1 month ago'},
-    ];
-
     return Column(
-      children: records.map((record) {
+      children: _personalRecords.map((record) {
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: card,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFF2A2A2A)),
           ),
@@ -241,13 +410,13 @@ class ProgressScreen extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.emoji_events, color: Color(0xFFE8FF00), size: 24),
+                  const Icon(Icons.emoji_events, color: accent, size: 24),
                   const SizedBox(width: 16),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        record['exercise']!,
+                        record['exercise'],
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -256,7 +425,7 @@ class ProgressScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        record['date']!,
+                        record['date'],
                         style: const TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                     ],
@@ -264,9 +433,9 @@ class ProgressScreen extends StatelessWidget {
                 ],
               ),
               Text(
-                record['weight']!,
+                '${record['weight']} kg',
                 style: const TextStyle(
-                  color: Color(0xFFE8FF00),
+                  color: accent,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
