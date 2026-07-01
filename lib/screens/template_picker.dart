@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'workout_log_screen.dart';
-import 'workout_history.dart';
 
-class WorkoutScreen extends StatefulWidget {
-  const WorkoutScreen({super.key});
+class TemplatePickerScreen extends StatefulWidget {
+  const TemplatePickerScreen({super.key});
 
   @override
-  State<WorkoutScreen> createState() => _WorkoutScreenState();
+  State<TemplatePickerScreen> createState() => _TemplatePickerScreenState();
 }
 
-class _WorkoutScreenState extends State<WorkoutScreen> {
+class _TemplatePickerScreenState extends State<TemplatePickerScreen> {
+  static const bg = Color(0xFF0D0D0D);
+  static const card = Color(0xFF1A1A1A);
+  static const accent = Color(0xFFE8FF00);
+
   List<Map<String, dynamic>> _templates = [];
   bool _isLoading = true;
 
@@ -45,64 +48,40 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => WorkoutLogScreen(template: template)),
-    ).then((_) => _fetchTemplates()); // refresh in case template list changed
-  }
-
-  void _openHistory() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const WorkoutHistoryScreen()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: card,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
-          'Workout',
+          'Choose Workout',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history, color: Colors.white),
-            onPressed: _openHistory,
-          ),
-        ],
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFE8FF00)),
-            )
+          ? const Center(child: CircularProgressIndicator(color: accent))
           : RefreshIndicator(
-              color: const Color(0xFFE8FF00),
+              color: accent,
               onRefresh: _fetchTemplates,
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _buildCard(
-                    title: 'Freeform Workout',
+                  _TemplateCard(
+                    title: 'Freeform',
                     subtitle: 'Log without a template',
                     icon: Icons.edit_note,
                     onTap: () => _openLogScreen(),
                   ),
-                  const SizedBox(height: 16),
-                  if (_templates.isNotEmpty)
-                    const Text(
-                      'Templates',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   ..._templates.map(
                     (t) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: _buildCard(
+                      child: _TemplateCard(
                         title: t['name'] ?? 'Unnamed',
                         subtitle: t['category'] ?? '',
                         icon: Icons.fitness_center,
@@ -115,24 +94,36 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
     );
   }
+}
 
-  Widget _buildCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
+class _TemplateCard extends StatelessWidget {
+  final String title, subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  static const card = Color(0xFF1A1A1A);
+  static const accent = Color(0xFFE8FF00);
+
+  const _TemplateCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: card,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFFE8FF00), size: 28),
+            Icon(icon, color: accent, size: 28),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
