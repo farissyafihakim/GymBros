@@ -1,6 +1,6 @@
 # GymBros — Smart Gym Occupancy Tracker
 
-A Flutter mobile application that helps gym-goers check real-time crowd levels before heading to the gym. Members use NFC to check in and out, and the app automatically tracks how many people are currently inside each gym. Also workout module that user can track their progress and goals.
+A Flutter mobile application that helps gym-goers check real-time crowd levels before heading to the gym. Members use NFC to check in and out, and the app automatically tracks how many people are currently inside each gym. Besides occupancy tracking, GymBros also serves as a personal fitness companion by enabling users to log workouts, track progress, and manage fitness goals.
 
 ---
 
