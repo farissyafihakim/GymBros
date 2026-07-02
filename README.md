@@ -14,7 +14,7 @@ A Flutter mobile application that helps gym-goers check real-time crowd levels b
 ## Group Members
 1. Faris Syafi Hakim Bin Mohd Suhaidi (2226745) Group leader
 2. Iman Adzroy Bin Ismail @ Asri (2228779)
-3. Arif  (2318237)
+3. Arif Haikal bin Shamsul Kamarul Adzhar (2318237)
 4. Muhammad Izzat Izzuddin Bin Mohd Yusof (2314525)
 
 ## Task Distribution
@@ -25,7 +25,7 @@ A Flutter mobile application that helps gym-goers check real-time crowd levels b
 2.Iman Adzroy (2228779)
 -  Requirement Analysis & Planning, Workout module 
 
-3.Arif  (2318237)
+3.Arif Haikal (2318237)
 - Project Development, Progress screen (graphs, personal records)
 
 4.Muhammad Izzat Izzuddin Bin Mohd Yusof (2314525)
